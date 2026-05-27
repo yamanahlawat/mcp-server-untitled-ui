@@ -1,0 +1,12 @@
+# Test files
+test/
+*.test.mjs
+
+# Environment / editor
+.env*
+.vscode/
+.idea/
+.DS_Store
+
+# npm artefacts
+*.tgz

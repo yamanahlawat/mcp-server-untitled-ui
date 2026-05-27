@@ -1,0 +1,53 @@
+{
+  "name": "mcp-server-untitled-ui",
+  "version": "1.0.0",
+  "description": "Offline MCP server for Untitled UI components. No API keys, no remote calls at runtime, no rate limits.",
+  "type": "module",
+  "bin": {
+    "mcp-server-untitled-ui": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/cli.mjs",
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "mcp",
+    "untitled-ui",
+    "model-context-protocol",
+    "ai",
+    "components",
+    "react",
+    "offline",
+    "claude",
+    "cursor"
+  ],
+  "author": "Yaman Ahlawat <yaman@outlook.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yamanahlawat/mcp-server-untitled-ui.git"
+  },
+  "homepage": "https://github.com/yamanahlawat/mcp-server-untitled-ui#readme",
+  "bugs": {
+    "url": "https://github.com/yamanahlawat/mcp-server-untitled-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "fuse.js": "^7.0.0",
+    "zod": "^3.23.0"
+  }
+}
