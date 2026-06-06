@@ -1,5 +1,21 @@
-import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, basename, dirname, relative, extname } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, join, relative } from "node:path";
+
+// Schema version of the on-disk index. Bump when the index shape or contents
+// change so stale installs auto-rebuild. bin/cli.mjs imports this as its single
+// source. v3: exclude pure util modules from components[] and match demos to the
+// components they actually render.
+export const CURRENT_INDEX_VERSION = 3;
+
+/**
+ * Directory portion of a relative path (everything but the final segment),
+ * always using forward slashes. Used to co-locate components with their demos.
+ * @param {string} relativePath
+ * @returns {string}
+ */
+function dirOf(relativePath) {
+  return relativePath.split(/[/\\]/).slice(0, -1).join("/");
+}
 
 export function extractExports(source) {
   const names = [];
@@ -55,6 +71,19 @@ export function extractProps(source) {
   return props;
 }
 
+/**
+ * Whether a parsed module looks like a UI component rather than a pure utility
+ * or data module. We require at least one PascalCase export (a component or
+ * context) or a hook-style export (useX). This filters out helpers such as
+ * `utils.ts` (getInitials) or `badge-types.ts` (badgeTypes) that live in the
+ * component tree but are not components themselves.
+ * @param {string[]} exports
+ * @returns {boolean}
+ */
+export function isComponentModule(exports) {
+  return exports.some((name) => /^[A-Z]/.test(name) || /^use[A-Z]/.test(name));
+}
+
 export function extractDependencies(source) {
   const deps = [];
   const regex = /import\s+[\s\S]*?from\s+["'](@\/[^"']+)["']/g;
@@ -76,6 +105,7 @@ export function parseComponentFile(source, relativePath) {
     category,
     subcategory,
     relativePath,
+    dir: dirOf(relativePath),
     importPath: `@/components/${relativePath.replace(extname(relativePath), "")}`,
     exports: extractExports(source),
     source,
@@ -86,10 +116,11 @@ export function parseComponentFile(source, relativePath) {
 
 export function buildIndex(componentsDir, iconsDir) {
   const components = [];
+  const examples = [];
   const icons = [];
 
   if (componentsDir) {
-    walkComponents(componentsDir, componentsDir, components);
+    walkComponents(componentsDir, componentsDir, components, examples);
   }
 
   if (iconsDir) {
@@ -97,24 +128,33 @@ export function buildIndex(componentsDir, iconsDir) {
   }
 
   return {
-    version: 1,
+    version: CURRENT_INDEX_VERSION,
     generatedAt: new Date().toISOString(),
     components,
+    examples,
     icons,
   };
 }
 
-function walkComponents(dir, baseDir, components) {
+function walkComponents(dir, baseDir, components, examples) {
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
     const stat = statSync(fullPath);
 
     if (stat.isDirectory()) {
       if (entry === "internal" || entry === "shared-assets") continue;
-      walkComponents(fullPath, baseDir, components);
+      walkComponents(fullPath, baseDir, components, examples);
+    } else if (entry.endsWith(".demo.tsx")) {
+      const source = readFileSync(fullPath, "utf-8");
+      const relPath = relative(baseDir, fullPath);
+      examples.push({
+        name: basename(relPath, ".demo.tsx"),
+        relativePath: relPath,
+        dir: dirOf(relPath),
+        source,
+      });
     } else if (
       (entry.endsWith(".tsx") || entry.endsWith(".ts")) &&
-      !entry.endsWith(".demo.tsx") &&
       !entry.endsWith(".story.tsx") &&
       !entry.endsWith(".test.tsx") &&
       !entry.endsWith(".d.ts")
@@ -122,7 +162,7 @@ function walkComponents(dir, baseDir, components) {
       const source = readFileSync(fullPath, "utf-8");
       const relPath = relative(baseDir, fullPath);
       const parsed = parseComponentFile(source, relPath);
-      if (parsed.exports.length > 0) {
+      if (isComponentModule(parsed.exports)) {
         components.push(parsed);
       }
     }

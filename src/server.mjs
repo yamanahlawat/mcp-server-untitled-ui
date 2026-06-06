@@ -1,21 +1,24 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createComponentSearch, createIconSearch } from "./search.mjs";
-import {
-  handleSearchComponents,
-  handleListComponents,
-  handleGetComponent,
-  handleGetComponentFile,
-  handleSearchIcons,
-  handleGetComponentProps,
-  handleGetComponentDependencies,
-} from "./tools.mjs";
-import { registerResources } from "./resources.mjs";
 import { registerPrompts } from "./prompts.mjs";
+import { registerResources } from "./resources.mjs";
+import { createComponentSearch, createIconSearch } from "./search.mjs";
+import { VERSION } from "./version.mjs";
+import {
+  handleGetComponent,
+  handleGetComponentDependencies,
+  handleGetComponentExamples,
+  handleGetComponentFile,
+  handleGetComponentProps,
+  handleGetInstallCommand,
+  handleListComponents,
+  handleSearchComponents,
+  handleSearchIcons,
+} from "./tools.mjs";
 
 export function createServer(index) {
-  const server = new McpServer({ name: "untitled-ui", version: "1.0.0" });
+  const server = new McpServer({ name: "untitled-ui", version: VERSION });
   const componentSearch = createComponentSearch(index.components);
   const iconSearch = createIconSearch(index.icons);
 
@@ -112,6 +115,30 @@ export function createServer(index) {
       },
     },
     ({ name }) => handleGetComponentDependencies({ name }, index)
+  );
+
+  server.registerTool(
+    "get_component_examples",
+    {
+      description:
+        "Get usage example(s) for a component from co-located .demo.tsx files",
+      inputSchema: {
+        name: z.string().describe("Component name (e.g. date-picker)"),
+      },
+    },
+    ({ name }) => handleGetComponentExamples({ name }, index)
+  );
+
+  server.registerTool(
+    "get_install_command",
+    {
+      description:
+        "Get the official Untitled UI CLI command to install a component into a project. The CLI installs all required dependencies automatically.",
+      inputSchema: {
+        name: z.string().describe("Component name (e.g. date-picker)"),
+      },
+    },
+    ({ name }) => handleGetInstallCommand({ name }, index)
   );
 
   registerResources(server, index);
