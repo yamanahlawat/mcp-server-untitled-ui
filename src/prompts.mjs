@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { firstExampleFor } from "./tools.mjs";
 
 export function registerPrompts(server, index, componentSearch) {
   server.registerPrompt(
@@ -115,6 +116,11 @@ Instructions:
         ? component.props.join("\n\n")
         : "No explicit props interface found. Check the source for inline prop types.";
 
+      const firstExample = firstExampleFor(component, index);
+      const exampleBlock = firstExample
+        ? `\n\n**Example:**\n\`\`\`tsx\n${firstExample.source}\n\`\`\``
+        : "";
+
       return {
         messages: [{
           role: "user",
@@ -135,7 +141,7 @@ ${propsText}
 **Source:**
 \`\`\`tsx
 ${component.source}
-\`\`\`
+\`\`\`${exampleBlock}
 
 Generate a complete usage example based on the source code above.`,
           },

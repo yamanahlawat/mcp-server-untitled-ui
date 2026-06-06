@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-06-06
+
+### Added
+
+- `get_component_examples` tool — returns usage examples sourced offline from `.demo.tsx` files.
+- `get_install_command` tool — emits the official Untitled UI CLI command to install a component (`npx untitledui@latest add <name> --yes`); the CLI resolves all dependencies automatically.
+- `get_component` output and the `component_usage` prompt now include an Example section when a demo exists.
+- `MCP_SERVER_UNTITLED_UI_DATA_DIR` environment variable — overrides where the index/cache is stored (CI, isolated instances).
+- `MCP_SERVER_UNTITLED_UI_COMPONENTS_URL` / `MCP_SERVER_UNTITLED_UI_ICONS_URL` environment variables — override the source tarballs (pin a release or use a private mirror).
+
+### Fixed
+
+- Examples are now matched to the components they actually render, instead of attaching any demo that happens to share a directory. Helpers like `cell` or `nav-button` no longer show an unrelated sibling demo.
+- Pure utility/data modules (e.g. `utils.ts`, `badge-types.ts`) are no longer indexed as components.
+
+### Changed
+
+- Index schema bumped to v3 (excludes util modules and refines demo→component matching; v2 added `examples[]` and a per-component `dir`). Existing installs auto-rebuild on next start.
+
+### Removed
+
+- Dropped the undocumented-in-code `MCP_SERVER_UNTITLED_UI_SEARCH_LIMIT` and `MCP_SERVER_UNTITLED_UI_SEARCH_THRESHOLD` from the README (they were never implemented; per-call `limit` already exists).
+
+---
+
 ## [1.0.0] - 2026-05-27
 
 ### Added

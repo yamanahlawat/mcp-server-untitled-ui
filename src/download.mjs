@@ -9,8 +9,27 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const MAX_REDIRECTS = 10;
 
-const COMPONENTS_TARBALL = "https://github.com/untitleduico/react/archive/refs/heads/main.tar.gz";
-const ICONS_TARBALL = "https://github.com/untitleduico/icons/archive/refs/heads/main.tar.gz";
+const DEFAULT_COMPONENTS_TARBALL = "https://github.com/untitleduico/react/archive/refs/heads/main.tar.gz";
+const DEFAULT_ICONS_TARBALL = "https://github.com/untitleduico/icons/archive/refs/heads/main.tar.gz";
+
+/**
+ * URL of the components tarball, overridable via
+ * MCP_SERVER_UNTITLED_UI_COMPONENTS_URL to pin a release or use a private mirror.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolveComponentsUrl(env = process.env) {
+  return env.MCP_SERVER_UNTITLED_UI_COMPONENTS_URL || DEFAULT_COMPONENTS_TARBALL;
+}
+
+/**
+ * URL of the icons tarball, overridable via MCP_SERVER_UNTITLED_UI_ICONS_URL.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolveIconsUrl(env = process.env) {
+  return env.MCP_SERVER_UNTITLED_UI_ICONS_URL || DEFAULT_ICONS_TARBALL;
+}
 
 function httpsGet(url, redirectCount = 0) {
   return new Promise((resolve, reject) => {
@@ -73,10 +92,10 @@ export async function downloadAll(onProgress) {
     const iconDest = join(tempDir, "icons");
 
     if (onProgress) onProgress("Downloading components from GitHub...");
-    await downloadAndExtract(COMPONENTS_TARBALL, compDest);
+    await downloadAndExtract(resolveComponentsUrl(), compDest);
 
     if (onProgress) onProgress("Downloading icons from GitHub...");
-    await downloadAndExtract(ICONS_TARBALL, iconDest);
+    await downloadAndExtract(resolveIconsUrl(), iconDest);
 
     const componentsDir = findExtractedDir(compDest, "components");
     const iconsDir = findExtractedDir(iconDest, "icons");
