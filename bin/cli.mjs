@@ -4,11 +4,28 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CURRENT_INDEX_VERSION } from "../src/index-builder.mjs";
+import { VERSION } from "../src/version.mjs";
 
-const DATA_DIR = join(homedir(), ".mcp-server-untitled-ui");
-const INDEX_PATH = join(DATA_DIR, "index.json");
-const VERSION = "1.0.0";
 const DEFAULT_TTL_DAYS = 7;
+
+/**
+ * Resolve the directory where the index and cache are stored. Honors the
+ * MCP_SERVER_UNTITLED_UI_DATA_DIR environment variable so multiple isolated
+ * instances (or CI runs) can keep separate caches, falling back to a per-user
+ * directory under $HOME.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolveDataDir(env = process.env) {
+  return env.MCP_SERVER_UNTITLED_UI_DATA_DIR || join(homedir(), ".mcp-server-untitled-ui");
+}
+
+const DATA_DIR = resolveDataDir();
+const INDEX_PATH = join(DATA_DIR, "index.json");
+
+// Re-exported so tests can assert the schema version through the CLI entrypoint.
+export { CURRENT_INDEX_VERSION };
 
 const args = process.argv.slice(2);
 
@@ -42,8 +59,9 @@ const noAutoRefresh = args.includes("--no-auto-refresh");
 const needsSetup = forceRebuild || !existsSync(INDEX_PATH);
 
 /**
- * Parse --ttl <days> from argv, falling back to the UNTITLED_UI_MCP_REFRESH_DAYS
- * environment variable, and then to the built-in default.
+ * Parse --ttl <days> from argv, falling back to the
+ * MCP_SERVER_UNTITLED_UI_REFRESH_DAYS environment variable, and then to the
+ * built-in default.
  * @returns {number} TTL in days
  */
 function parseTtlDays() {
@@ -75,6 +93,30 @@ export function isIndexStale(index, ttlDays) {
   return ageMs > ttlMs;
 }
 
+/**
+ * Returns true if the on-disk index predates the current schema version and
+ * must be rebuilt to gain new fields (examples[], dir, etc.).
+ * A missing version is treated as the original v1 (stale).
+ * @param {object} index
+ * @returns {boolean}
+ */
+export function isIndexVersionStale(index) {
+  const version = typeof index.version === "number" ? index.version : 1;
+  return version < CURRENT_INDEX_VERSION;
+}
+
+/**
+ * Human-readable description of how old the index is, for the rebuild log line.
+ * @param {object} index
+ * @returns {string}
+ */
+function describeIndexAge(index) {
+  const generatedAt = new Date(index.generatedAt);
+  if (Number.isNaN(generatedAt.getTime())) return "Index has unknown age";
+  const days = Math.floor((Date.now() - generatedAt.getTime()) / (24 * 60 * 60 * 1000));
+  return `Index is ${days} day(s) old`;
+}
+
 async function setup() {
   const { downloadAll, cleanup } = await import("../src/download.mjs");
   const { buildIndex, writeIndex } = await import("../src/index-builder.mjs");
@@ -89,7 +131,7 @@ async function setup() {
     const index = buildIndex(componentsDir, iconsDir);
     writeIndex(index, INDEX_PATH);
 
-    log(`Index built: ${index.components.length} components, ${index.icons.length} icons`);
+    log(`Index built: ${index.components.length} components, ${index.examples.length} examples, ${index.icons.length} icons`);
     log(`Saved to ${INDEX_PATH}`);
     return index;
   } finally {
@@ -117,20 +159,19 @@ async function main() {
         throw new Error("Corrupt index file. Re-run with --rebuild.");
       }
 
-      if (!setupOnly && !noAutoRefresh) {
+      const versionStale = isIndexVersionStale(index);
+      if (!setupOnly && (versionStale || !noAutoRefresh)) {
         const ttlDays = parseTtlDays();
-        if (isIndexStale(index, ttlDays)) {
-          const generatedAt = new Date(index.generatedAt);
-          const ageMsg = Number.isNaN(generatedAt.getTime())
-            ? "Index has unknown age"
-            : `Index is ${Math.floor((Date.now() - generatedAt.getTime()) / (24 * 60 * 60 * 1000))} day(s) old`;
-          console.error(
-            `${ageMsg} (TTL: ${ttlDays} day(s)). Auto-refreshing...`
-          );
+        const ageStale = !noAutoRefresh && isIndexStale(index, ttlDays);
+        if (versionStale || ageStale) {
+          const reason = versionStale
+            ? `Index schema is outdated (v${index.version ?? 1} < v${CURRENT_INDEX_VERSION})`
+            : describeIndexAge(index);
+          console.error(`${reason}. Rebuilding...`);
           try {
             index = await setup();
           } catch (refreshErr) {
-            console.error(`Auto-refresh failed (${refreshErr.message}), using existing index.`);
+            console.error(`Rebuild failed (${refreshErr.message}), using existing index.`);
           }
         }
       }

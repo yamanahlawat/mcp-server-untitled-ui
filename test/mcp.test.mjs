@@ -1,7 +1,8 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { registerResources } from "../src/resources.mjs";
+import { describe, it } from "node:test";
 import { registerPrompts } from "../src/prompts.mjs";
+import { registerResources } from "../src/resources.mjs";
+import { createServer } from "../src/server.mjs";
 
 const sampleIndex = {
   components: [
@@ -10,6 +11,7 @@ const sampleIndex = {
       category: "base",
       subcategory: "buttons",
       relativePath: "base/buttons/button.tsx",
+      dir: "base/buttons",
       importPath: "@/components/base/buttons/button",
       exports: ["Button"],
       source: "export function Button() { return <button>Click</button>; }",
@@ -19,7 +21,15 @@ const sampleIndex = {
   ],
   icons: [
     { name: "arrow-down", file: "arrow-down.svg" },
-  ]
+  ],
+  examples: [
+    {
+      name: "button",
+      relativePath: "base/buttons/button.demo.tsx",
+      dir: "base/buttons",
+      source: "export default function ButtonDemo() { return <Button variant=\"primary\">Demo</Button>; }",
+    },
+  ],
 };
 
 const mockComponentSearch = (query) => {
@@ -132,9 +142,52 @@ describe("MCP Resources and Prompts registration", () => {
     const usageResult = compUsagePrompt.callback({ component_name: "button" });
     assert.ok(usageResult.messages[0].content.text.includes("import { Button } from \"@/components/base/buttons/button\""));
     assert.ok(usageResult.messages[0].content.text.includes("ButtonProps"));
+    // Example block should appear when a same-dir demo exists
+    assert.ok(usageResult.messages[0].content.text.includes("**Example:**"));
+    assert.ok(usageResult.messages[0].content.text.includes("ButtonDemo"));
+
+    // 3b. Test component_usage prompt — found, no same-dir demo
+    const indexWithoutExamples = { ...sampleIndex, examples: [] };
+    const registeredPromptsNoDemo = {};
+    const mockServerNoDemo = {
+      registerPrompt(id, metadata, callback) {
+        registeredPromptsNoDemo[id] = { metadata, callback };
+      }
+    };
+    registerPrompts(mockServerNoDemo, indexWithoutExamples, mockComponentSearch);
+    const usageResultNoDemo = registeredPromptsNoDemo["component_usage"].callback({ component_name: "button" });
+    assert.ok(!usageResultNoDemo.messages[0].content.text.includes("**Example:**"));
 
     // 4. Test component_usage prompt — not found
     const notFoundResult = compUsagePrompt.callback({ component_name: "nonexistent" });
     assert.ok(notFoundResult.messages[0].content.text.includes("not found"));
+  });
+});
+
+describe("MCP Tool registration", () => {
+  it("createServer registers get_component_examples and get_install_command", async () => {
+    const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+
+    const registeredToolNames = [];
+    const originalRegisterTool = McpServer.prototype.registerTool;
+    McpServer.prototype.registerTool = function (name, config, callback) {
+      registeredToolNames.push(name);
+      return originalRegisterTool.call(this, name, config, callback);
+    };
+
+    try {
+      createServer(sampleIndex);
+    } finally {
+      McpServer.prototype.registerTool = originalRegisterTool;
+    }
+
+    assert.ok(
+      registeredToolNames.includes("get_component_examples"),
+      `Expected get_component_examples in [${registeredToolNames.join(", ")}]`
+    );
+    assert.ok(
+      registeredToolNames.includes("get_install_command"),
+      `Expected get_install_command in [${registeredToolNames.join(", ")}]`
+    );
   });
 });
